@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Campaign Builder</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .rule-block {
+            @apply flex items-center bg-gray-100 p-2 rounded-lg border border-gray-200;
+        }
+        .rule-group {
+            @apply pl-6 border-l-2 border-dashed border-gray-300 relative;
+        }
+        .rule-group::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background-color: #d1d5db;
+        }
+    </style>
+</head>
+<body class="p-8">
+
+<div id="app" class="max-w-4xl mx-auto bg-white p-8 rounded-2xl shadow-lg border border-gray-200">
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-3xl font-bold text-gray-800">Campaign Builder</h1>
+    </div>
+
+    <!-- Rule Builder Section -->
+    <div class="mb-8">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-semibold text-gray-700">Audience Segmentation</h2>
+            <button id="add-group-btn" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
+                Add Rule Group
+            </button>
+        </div>
+        <div id="rule-builder" class="space-y-4">
+            <!-- Dynamic rule groups will be injected here -->
+        </div>
+
+        <!-- Audience Preview & Campaign Buttons -->
+        <div class="flex items-center justify-between mt-6 p-4 bg-gray-100 rounded-lg border border-gray-200">
+            <div class="flex items-center space-x-2">
+                <span class="text-sm text-gray-600">Audience Size Preview:</span>
+                <span id="audience-size" class="text-lg font-bold text-blue-600">0</span>
+            </div>
+            <button id="create-campaign-btn" class="bg-green-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-green-700 transition-colors">
+                Create Campaign
+            </button>
+        </div>
+    </div>
+
+    <!-- Campaign History Section -->
+    <div>
+        <h2 class="text-xl font-semibold text-gray-700 mb-4">Campaign History</h2>
+        <div id="campaign-history" class="space-y-4">
+            <!-- Campaign history list will be injected here -->
+            <div class="text-center text-gray-500 p-4 rounded-lg bg-gray-100">No campaigns created yet.</div>
+        </div>
+    </div>
+</div>
+
+<!-- Simple Message Modal -->
+<div id="message-modal" class="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center hidden">
+    <div class="bg-white p-6 rounded-xl shadow-xl w-full max-w-sm">
+        <h3 id="modal-title" class="text-xl font-bold mb-4 text-gray-800"></h3>
+        <p id="modal-message" class="text-gray-600 mb-6"></p>
+        <div class="flex justify-end">
+            <button id="close-modal-btn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">Close</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Mock customer data
+    const customers = [
+        { id: 1, name: 'Mohit', spend: 12500, visits: 2, last_active_days: 15 },
+        { id: 2, name: 'Priya', spend: 5000, visits: 5, last_active_days: 120 },
+        { id: 3, name: 'Anil', spend: 1500, visits: 10, last_active_days: 5 },
+        { id: 4, name: 'Sonal', spend: 25000, visits: 1, last_active_days: 95 },
+        { id: 5, name: 'Vijay', spend: 8000, visits: 3, last_active_days: 60 },
+        { id: 6, name: 'Sneha', spend: 9500, visits: 4, last_active_days: 25 },
+        { id: 7, name: 'Kiran', spend: 300, visits: 12, last_active_days: 180 },
+        { id: 8, name: 'Gaurav', spend: 18000, visits: 2, last_active_days: 7 },
+        { id: 9, name: 'Divya', spend: 7500, visits: 6, last_active_days: 50 },
+        { id: 10, name: 'Rajesh', spend: 4000, visits: 9, last_active_days: 100 },
+        { id: 11, name: 'Ritu', spend: 11000, visits: 1, last_active_days: 30 },
+        { id: 12, name: 'Vikram', spend: 6000, visits: 5, last_active_days: 45 },
+    ];
+
+    // Global state
+    let ruleGroups = [];
+    let communicationLog = [];
+    let nextCampaignId = 1;
+
+    // DOM Elements
+    const ruleBuilderEl = document.getElementById('rule-builder');
+    const addGroupBtn = document.getElementById('add-group-btn');
+    const audienceSizeEl = document.getElementById('audience-size');
+    const createCampaignBtn = document.getElementById('create-campaign-btn');
+    const campaignHistoryEl = document.getElementById('campaign-history');
+    const messageModal = document.getElementById('message-modal');
+    const modalTitleEl = document.getElementById('modal-title');
+    const modalMessageEl = document.getElementById('modal-message');
+    const closeModalBtn = document.getElementById('close-modal-btn');
+
+    // Utility function to show a custom message modal
+    function showModal(title, message) {
+        modalTitleEl.textContent = title;
+        modalMessageEl.textContent = message;
+        messageModal.classList.remove('hidden');
+    }
+
+    // Event listener for closing the modal
+    closeModalBtn.addEventListener('click', () => {
+        messageModal.classList.add('hidden');
+    });
+
+    // Function to render a single rule block
+    function createRuleBlock(groupId, ruleId) {
+        const ruleBlock = document.createElement('div');
+        ruleBlock.className = 'rule-block space-x-2';
+        ruleBlock.innerHTML = `
+            <select class="rule-field bg-white rounded-md border border-gray-300 p-1.5 text-sm">
+                <option value="spend">Spend (INR)</option>
+                <option value="visits">Visits</option>
+                <option value="last_active_days">Inactive Days</option>
+            </select>
+            <select class="rule-operator bg-white rounded-md border border-gray-300 p-1.5 text-sm">
+                <option value=">">></option>
+                <option value="<"><</option>
+                <option value="==">=</option>
+            </select>
+            <input type="number" class="rule-value bg-white rounded-md border border-gray-300 p-1.5 w-24 text-sm" placeholder="Value">
+            <button class="remove-rule-btn text-red-500 hover:text-red-700 ml-auto">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        `;
+        ruleBlock.querySelector('.remove-rule-btn').addEventListener('click', () => removeRule(groupId, ruleId));
+        ruleBlock.querySelectorAll('select, input').forEach(el => el.addEventListener('change', updateStateAndPreview));
+        return ruleBlock;
+    }
+
+    // Function to render a group of rules with a logical operator
+    function createRuleGroup(groupId) {
+        const groupEl = document.createElement('div');
+        groupEl.id = `group-${groupId}`;
+        groupEl.className = 'rule-group p-4 bg-gray-50 rounded-lg';
+        groupEl.innerHTML = `
+            <div class="flex justify-between items-center mb-2">
+                <select class="group-operator bg-white rounded-md border border-gray-300 p-1.5 text-xs font-semibold">
+                    <option value="AND">AND</option>
+                    <option value="OR">OR</option>
+                </select>
+                <div class="space-x-2">
+                    <button class="add-rule-btn bg-gray-200 text-gray-800 px-3 py-1 rounded-md text-xs hover:bg-gray-300 transition-colors">Add Condition</button>
+                    <button class="remove-group-btn bg-red-100 text-red-600 px-3 py-1 rounded-md text-xs hover:bg-red-200 transition-colors">Remove Group</button>
+                </div>
+            </div>
+            <div class="group-rules space-y-3"></div>
+        `;
+
+        groupEl.querySelector('.add-rule-btn').addEventListener('click', () => addRule(groupId));
+        groupEl.querySelector('.remove-group-btn').addEventListener('click', () => removeGroup(groupId));
+        groupEl.querySelector('.group-operator').addEventListener('change', updateStateAndPreview);
+
+        return groupEl;
+    }
+
+    // Add a new rule group to the UI and state
+    function addGroup() {
+        const groupId = ruleGroups.length;
+        const groupData = { id: groupId, operator: 'AND', rules: [] };
+        ruleGroups.push(groupData);
+        const groupEl = createRuleGroup(groupId);
+        ruleBuilderEl.appendChild(groupEl);
+        addRule(groupId); // Add the first rule to the new group
+    }
+
+    // Add a new rule to a specific group
+    function addRule(groupId) {
+        const groupData = ruleGroups.find(g => g.id === groupId);
+        if (!groupData) return;
+        const ruleId = groupData.rules.length;
+        const ruleData = { id: ruleId, field: 'spend', operator: '>', value: 0 };
+        groupData.rules.push(ruleData);
+        
+        const ruleEl = createRuleBlock(groupId, ruleId);
+        document.querySelector(`#group-${groupId} .group-rules`).appendChild(ruleEl);
+        updateStateAndPreview();
+    }
+
+    // Remove a rule from a group
+    function removeRule(groupId, ruleId) {
+        const groupData = ruleGroups.find(g => g.id === groupId);
+        if (!groupData) return;
+        groupData.rules = groupData.rules.filter(r => r.id !== ruleId);
+        
+        const ruleEl = document.querySelector(`#group-${groupId} .group-rules`).children[ruleId];
+        if (ruleEl) {
+            ruleEl.remove();
+        }
+        
+        if (groupData.rules.length === 0) {
+            removeGroup(groupId);
+        } else {
+            updateStateAndPreview();
+        }
+    }
+    
+    // Remove a group from the state and UI
+    function removeGroup(groupId) {
+        ruleGroups = ruleGroups.filter(g => g.id !== groupId);
+        const groupEl = document.getElementById(`group-${groupId}`);
+        if (groupEl) groupEl.remove();
+        updateStateAndPreview();
+    }
+
+    // Update the global state from UI changes
+    function updateStateAndPreview() {
+        ruleGroups.forEach((group, groupIndex) => {
+            const groupEl = document.getElementById(`group-${group.id}`);
+            if (groupEl) {
+                const operatorEl = groupEl.querySelector('.group-operator');
+                group.operator = operatorEl ? operatorEl.value : 'AND';
+
+                const rulesEl = groupEl.querySelector('.group-rules');
+                group.rules = [];
+                Array.from(rulesEl.children).forEach((ruleEl, ruleIndex) => {
+                    const ruleData = {
+                        id: ruleIndex,
+                        field: ruleEl.querySelector('.rule-field').value,
+                        operator: ruleEl.querySelector('.rule-operator').value,
+                        value: parseFloat(ruleEl.querySelector('.rule-value').value)
+                    };
+                    group.rules.push(ruleData);
+                });
+            }
+        });
+        updateAudiencePreview();
+    }
+
+    // Evaluate rules for a single customer
+    function evaluateCustomer(customer) {
+        if (ruleGroups.length === 0) return true; // Match all if no rules are set
+
+        let groupResults = ruleGroups.map(group => {
+            let groupRuleResults = group.rules.map(rule => {
+                const customerValue = customer[rule.field];
+                const ruleValue = rule.value;
+                switch (rule.operator) {
+                    case '>': return customerValue > ruleValue;
+                    case '<': return customerValue < ruleValue;
+                    case '==': return customerValue === ruleValue;
+                    default: return false;
+                }
+            });
+
+            // Combine rules within a group with an AND operator
+            return groupRuleResults.every(result => result);
+        });
+
+        // Combine group results with their specified operators
+        let finalResult = groupResults[0];
+        for (let i = 1; i < groupResults.length; i++) {
+            const operator = ruleGroups[i-1].operator;
+            const nextResult = groupResults[i];
+            if (operator === 'AND') {
+                finalResult = finalResult && nextResult;
+            } else if (operator === 'OR') {
+                finalResult = finalResult || nextResult;
+            }
+        }
+        return finalResult;
+    }
+    
+    // Update the audience size preview
+    function updateAudiencePreview() {
+        const filteredAudience = customers.filter(evaluateCustomer);
+        audienceSizeEl.textContent = filteredAudience.length;
+    }
+
+    // Simulate a vendor API call with a 90% success rate
+    async function simulateVendorAPI(customer) {
+        return new Promise(resolve => {
+            setTimeout(() => {
+                const isSent = Math.random() < 0.9;
+                resolve({
+                    customerId: customer.id,
+                    status: isSent ? 'SENT' : 'FAILED',
+                    message: `Hi ${customer.name}, here's 10% off on your next order!`
+                });
+            }, Math.random() * 500); // Simulate network latency
+        });
+    }
+
+    // Simulate a delivery receipt API on the backend
+    async function simulateDeliveryReceiptAPI(campaignId, receipt) {
+        setTimeout(() => {
+            const campaign = communicationLog.find(c => c.id === campaignId);
+            if (campaign) {
+                if (receipt.status === 'SENT') {
+                    campaign.sent++;
+                } else {
+                    campaign.failed++;
+                }
+                renderCampaignHistory();
+            }
+        }, 1000); // Simulate a consumer-driven process with a delay
+    }
+
+    // Handle campaign creation
+    async function createCampaign() {
+        if (ruleGroups.length === 0) {
+            showModal('Error', 'Please define at least one rule group to create a campaign.');
+            return;
+        }
+
+        createCampaignBtn.disabled = true;
+        createCampaignBtn.textContent = 'Creating Campaign...';
+
+        const audience = customers.filter(evaluateCustomer);
+        const audienceSize = audience.length;
+
+        if (audienceSize === 0) {
+            showModal('Error', 'The current rules match no customers. Please adjust your criteria.');
+            createCampaignBtn.disabled = false;
+            createCampaignBtn.textContent = 'Create Campaign';
+            return;
+        }
+
+        const campaign = {
+            id: nextCampaignId++,
+            audienceSize: audienceSize,
+            sent: 0,
+            failed: 0,
+            status: 'Processing',
+            createdAt: new Date().toISOString()
+        };
+        communicationLog.unshift(campaign); // Add to the top of the history
+        renderCampaignHistory();
+
+        // Simulate sending messages to each customer in the audience
+        for (const customer of audience) {
+            const receipt = await simulateVendorAPI(customer);
+            // Simulate hitting the delivery receipt API
+            simulateDeliveryReceiptAPI(campaign.id, receipt);
+        }
+
+        createCampaignBtn.disabled = false;
+        createCampaignBtn.textContent = 'Create Campaign';
+        showModal('Success!', 'Campaign has been initiated and is being delivered to the audience.');
+    }
+
+    // Render the campaign history list
+    function renderCampaignHistory() {
+        campaignHistoryEl.innerHTML = '';
+        if (communicationLog.length === 0) {
+            campaignHistoryEl.innerHTML = `<div class="text-center text-gray-500 p-4 rounded-lg bg-gray-100">No campaigns created yet.</div>`;
+            return;
+        }
+
+        communicationLog.forEach(campaign => {
+            const campaignEl = document.createElement('div');
+            campaignEl.className = 'bg-gray-50 p-6 rounded-lg border border-gray-200 shadow-sm';
+            campaignEl.innerHTML = `
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-medium text-gray-500">Campaign ID: ${campaign.id}</span>
+                    <span class="text-xs text-gray-400">${new Date(campaign.createdAt).toLocaleString()}</span>
+                </div>
+                <div class="text-2xl font-bold text-blue-600 mb-2">${campaign.audienceSize} Customers</div>
+                <p class="text-sm text-gray-600 mb-4">Delivery Status:</p>
+                <div class="flex space-x-4 text-sm font-semibold">
+                    <span class="text-green-600">Sent: ${campaign.sent}</span>
+                    <span class="text-red-600">Failed: ${campaign.failed}</span>
+                </div>
+            `;
+            campaignHistoryEl.appendChild(campaignEl);
+        });
+    }
+
+    // Initial setup
+    addGroupBtn.addEventListener('click', addGroup);
+    createCampaignBtn.addEventListener('click', createCampaign);
+    addGroup(); // Start with one initial rule group
+    renderCampaignHistory();
+</script>
+
+</body>
+</html>
